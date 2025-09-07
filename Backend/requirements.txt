@@ -1,0 +1,34 @@
+# Core
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+
+# HTTP requests
+httpx==0.27.0   # async requests to Cloudflare & AbuseIPDB
+requests==2.32.3
+
+# Data models
+pydantic==2.9.2
+
+# Optional: CORS for frontend-backend communication
+fastapi-cors==0.1.0
+
+# Geolocation (IP to country/lat/lon)
+geoip2==4.8.0       # MaxMind GeoIP2 reader
+# OR use free API via httpx instead of local DB
+
+# Logging
+loguru==0.7.2
+
+# Redis for caching & attack streaming
+redis==5.1.1
+aioredis==2.0.1   # async Redis client
+
+# Optional (if storing data)
+sqlalchemy==2.0.35
+databases==0.9.0    # async DB
+psycopg2-binary==2.9.9   # PostgreSQL driver (if using Postgres)
+redis==5.1.1             # if using caching
+
+# Testing
+pytest==8.3.3
+httpx[http2]==0.27.0
