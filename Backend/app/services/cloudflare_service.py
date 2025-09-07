@@ -1,27 +1,30 @@
+#importing libs
 from redis.asyncio import Redis
-import json
-import asyncio
+from typing import Dict
+import logging
+from fastapi import HTTPException
 
-REDIS_URL = "redis://localhost:6379"
-CHANNEL = "cyberattacks"
+#importing dependendancies
+from config import CF_API_TOKEN
+from utils.cache import RedisCache
+from utils.http_client import client
 
-async def publish_attack_event(event: dict):
-    redis = Redis.from_url(REDIS_URL, decode_responses=True)
-    await redis.publish(CHANNEL, json.dumps(event))
+#intializing
+HEADERS = {"Authorization": f"Bearer {CF_API_TOKEN}"}
+logger = logging.getLogger("uvicorn")
 
-# Example attack event
-async def test_event():
-    event = {
-        "source_ip": "192.168.1.10",
-        "country": "US",
-        "latitude": 37.7749,
-        "longitude": -122.4194,
-        "target": "yourserver.com",
-        "action": "blocked",
-        "timestamp": "2025-09-05T12:00:00Z"
-    }
-    await publish_attack_event(event)
+async def cached_fetch(url: str, params:Dict = None, cache: RedisCache = None, cache_key: str = None, ttl: int = 30):
+    if not cache_key:
+        cache_key = f"url:{url}:{params}"
+    cached = await cache.get_cache(cache_key)
+    if cached:
+        logger.info(f"[cache HIT] {cache_key}")
+    r = await client.get(url, params=params, headers=HEADERS)
+    logger.info(f"[Cloudflare Fetch] {url} {r.status_code}")
+    if r.status_code != 200:
+        logger.error(f"[Cloudflare Error] {r.text}")
+        raise HTTPException(status_code=r.status_code, detail=f"Upstream error: {r.text}")
+    data = r.json()
+    await cache.set_cache(cache_key, data, ttl=ttl)
+    return data
 
-# Run for testing
-if __name__ == "__main__":
-    asyncio.run(test_event())
