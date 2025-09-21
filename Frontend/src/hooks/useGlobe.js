@@ -102,17 +102,13 @@ export default function useGlobe({ containerRef, connectSocket }) {
   // Focus camera smoothly
   const setPointOfView = useCallback((pov = DEFAULT_CAMERA, ms = 1200) => {
     if (!globeInstance.current) return;
-    try {
-      globeInstance.current.pointOfView(
-        { lat: pov.lat, lng: pov.lng, altitude: pov.altitude ?? pov.alt },
-        ms
-      );
-    } catch (err) {
-      const controls = globeInstance.current.controls();
-      controls.target.set(pov.lat, pov.lng, pov.altitude ?? 2.5);
-    }
+    globeInstance.current.pointOfView(
+      { lat: pov.lat, lng: pov.lng, altitude: pov.altitude ?? pov.alt },
+      ms
+    );
   }, []);
 
+  // Highlight + pulse on city
   const focusOnCity = useCallback(
     ({ lat, lng, altitude = 0.5, pulseRadius = 6 }) => {
       setPointOfView({ lat, lng, altitude }, 1400);
@@ -131,6 +127,21 @@ export default function useGlobe({ containerRef, connectSocket }) {
     [setPointOfView]
   );
 
+  // ✅ Stop rotation
+  const stopRotation = useCallback(() => {
+    if (globeInstance.current) {
+      globeInstance.current.controls().autoRotate = false;
+    }
+  }, []);
+
+  // ✅ Resume rotation
+  const resumeRotation = useCallback(() => {
+    if (globeInstance.current) {
+      globeInstance.current.controls().autoRotate = true;
+    }
+  }, []);
+
+  // Init
   const initialize = useCallback(() => {
     if (!containerRef.current || globeRef.current) return;
 
@@ -140,6 +151,7 @@ export default function useGlobe({ containerRef, connectSocket }) {
       .showGlobe(true)
       .showGraticules(false)
       .showAtmosphere(true)
+      .backgroundColor("rgba(0,0,0,0)")
       .atmosphereColor("#460194")
       .atmosphereAltitude(0.5)
       .globeMaterial(
@@ -173,7 +185,8 @@ export default function useGlobe({ containerRef, connectSocket }) {
       .hexPolygonUseDots(true)
       .hexPolygonColor(() => "#8882ff");
 
-    globeInstance.current.scene().background = new THREE.Color(0x000000);
+    globeInstance.current.renderer().setClearColor(0x000000, 0); // alpha = 0
+    globeInstance.current.scene().background = null;
 
     const controls = globeInstance.current.controls();
     controls.autoRotate = true;
@@ -291,5 +304,13 @@ export default function useGlobe({ containerRef, connectSocket }) {
     };
   }, [containerRef, connectSocket]);
 
-  return { initialize, recentAttacks, globeRef, setPointOfView, focusOnCity };
+  return {
+    initialize,
+    recentAttacks,
+    globeRef,
+    setPointOfView,
+    focusOnCity,
+    stopRotation,
+    resumeRotation,
+  };
 }
