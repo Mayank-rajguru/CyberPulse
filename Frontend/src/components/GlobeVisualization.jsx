@@ -226,7 +226,6 @@ export default function GlobeVisualization() {
       </div>
 
       {/* Realtime Panel */}
-        <RadarSummaryCharts />
       <AnimatePresence>
         {uiOpened && (
           <>

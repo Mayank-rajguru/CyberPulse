@@ -6,23 +6,28 @@ import countriesJsonData from "../data/ne_110m_admin_0_countries.json";
 import countries from "world-countries";
 
 export const DEFAULT_CAMERA = { lat: 0, lng: 0, altitude: 2.5 };
-const PULSE_DURATION = 1400;
+const PULSE_DURATION = 6000; // increased for visibility
 const MAX_ARCS = 30;
 const MAX_POINTS = 30;
 const RELEASE_WINDOW = 15000;
 
-// Map ISO2 → coordinates
 const countryCoords = {};
 countries.forEach((c) => {
-  if (c.cca2 && c.latlng?.length === 2) {
+  if (c.cca2) {
+    const latlng = c.latlng && c.latlng.length === 2 ? c.latlng : [0, 0];
     countryCoords[c.cca2.toUpperCase()] = {
-      lat: c.latlng[0],
-      lng: c.latlng[1],
+      lat: latlng[0],
+      lng: latlng[1],
       code: c.cca2.toUpperCase(),
       name: c.name.common,
     };
   }
 });
+
+const fallbackCoords = {
+  ET: { lat: 9.145, lng: 40.489673, code: "ET", name: "Ethiopia" },
+  LT: { lat: 55.1694, lng: 23.8813, code: "LT", name: "Lithuania" },
+};
 
 export default function useGlobe({ containerRef, connectSocket }) {
   const globeRef = useRef(null);
@@ -71,7 +76,7 @@ export default function useGlobe({ containerRef, connectSocket }) {
       pulseTriggered: false,
       dashAnimateTime: duration,
       arcDashInitialGap: 0,
-      arcDashLength: 0,
+      arcDashLength: 0.25,
       opacity: 1,
     };
     arcsBuffer.current.push(arcData);
@@ -82,7 +87,7 @@ export default function useGlobe({ containerRef, connectSocket }) {
       lng: origin.lng,
       color: getPulseColor(arcData.value),
       timestamp: Date.now(),
-      maxRadius: 1.2 + (arcData.value ?? 0) * 1.0,
+      maxRadius: 1.2 + arcData.value,
       currentRadius: 0.2,
       opacity: 1.0,
     });
@@ -99,7 +104,6 @@ export default function useGlobe({ containerRef, connectSocket }) {
     ]);
   };
 
-  // Focus camera smoothly
   const setPointOfView = useCallback((pov = DEFAULT_CAMERA, ms = 1200) => {
     if (!globeInstance.current) return;
     globeInstance.current.pointOfView(
@@ -108,11 +112,9 @@ export default function useGlobe({ containerRef, connectSocket }) {
     );
   }, []);
 
-  // Highlight + pulse on city
   const focusOnCity = useCallback(
     ({ lat, lng, altitude = 0.5, pulseRadius = 6 }) => {
       setPointOfView({ lat, lng, altitude }, 1400);
-
       pointsBuffer.current.push({
         id: `pulse-${Date.now()}`,
         lat,
@@ -127,25 +129,41 @@ export default function useGlobe({ containerRef, connectSocket }) {
     [setPointOfView]
   );
 
-  // ✅ Stop rotation
   const stopRotation = useCallback(() => {
-    if (globeInstance.current) {
-      globeInstance.current.controls().autoRotate = false;
-    }
+    globeInstance.current?.controls().autoRotate && (globeInstance.current.controls().autoRotate = false);
   }, []);
 
-  // ✅ Resume rotation
   const resumeRotation = useCallback(() => {
-    if (globeInstance.current) {
-      globeInstance.current.controls().autoRotate = true;
-    }
+    globeInstance.current?.controls().autoRotate && (globeInstance.current.controls().autoRotate = true);
   }, []);
 
-  // Init
-  const initialize = useCallback(() => {
-    if (!containerRef.current || globeRef.current) return;
+  const handleSocketEvent = (event) => {
+    if (!event || event.type !== "attack") return;
 
-    globeInstance.current = Globe()(containerRef.current)
+    let origin = countryCoords[event.origin.code.toUpperCase()] || fallbackCoords[event.origin.code.toUpperCase()] || { lat: 0, lng: 0, name: event.origin.name };
+    let target = countryCoords[event.target.code.toUpperCase()] || fallbackCoords[event.target.code.toUpperCase()] || { lat: 0, lng: 0, name: event.target.name };
+
+    attackQueue.current.push({
+      origin,
+      target,
+      event,
+      releaseTime: Date.now() + Math.random() * RELEASE_WINDOW,
+    });
+  };
+
+  const initializeSocket = useCallback(() => {
+    if (!connectSocket) return;
+    connectSocket(handleSocketEvent);
+  }, [connectSocket]);
+
+  const initialize = useCallback(() => {
+    if (!containerRef.current || globeInstance.current) return;
+
+    // ✅ attach to ref
+    globeRef.current = Globe()(containerRef.current);
+    globeInstance.current = globeRef.current;
+
+    globeInstance.current
       .width(containerRef.current.clientWidth)
       .height(containerRef.current.clientHeight)
       .showGlobe(true)
@@ -185,7 +203,7 @@ export default function useGlobe({ containerRef, connectSocket }) {
       .hexPolygonUseDots(true)
       .hexPolygonColor(() => "#8882ff");
 
-    globeInstance.current.renderer().setClearColor(0x000000, 0); // alpha = 0
+    globeInstance.current.renderer().setClearColor(0x000000, 0);
     globeInstance.current.scene().background = null;
 
     const controls = globeInstance.current.controls();
@@ -194,103 +212,83 @@ export default function useGlobe({ containerRef, connectSocket }) {
     controls.enableZoom = true;
     controls.enablePan = true;
 
-    let lastFrame = 0;
     const animate = () => {
       const now = Date.now();
-      if (now - lastFrame > 33) {
-        lastFrame = now;
 
-        // release queued attacks
-        attackQueue.current = attackQueue.current.filter((item) => {
-          if (now >= item.releaseTime) {
-            spawnAttack(item.origin, item.target, item.event);
-            return false;
+      // release queued attacks
+      attackQueue.current = attackQueue.current.filter((item) => {
+        if (now >= item.releaseTime) {
+          spawnAttack(item.origin, item.target, item.event);
+          return false;
+        }
+        return true;
+      });
+
+      // update arcs
+      arcsBuffer.current = arcsBuffer.current
+        .filter((arc) => {
+          const age = now - arc.startTime;
+          const t = age / arc.dashAnimateTime;
+          const p = Math.max(0, Math.min(1, t));
+
+          if (p >= 1 && !arc.pulseTriggered) {
+            arc.pulseTriggered = true;
+            pointsBuffer.current.push({
+              id: now + "-" + Math.random().toString(36).slice(2, 6),
+              lat: arc.endLat,
+              lng: arc.endLng,
+              color: getPulseColor(arc.value),
+              timestamp: now,
+              maxRadius: 20 + (arc.value ?? 0) * 6,
+              currentRadius: 1,
+              opacity: 1.0,
+            });
           }
+
+          if (t > 1.15) return false;
+
+          const MAX_LEN = 0.28;
+          const GROW_END = 0.2;
+          const SHRINK_START = 0.8;
+          let len;
+          if (p <= GROW_END) len = (p / GROW_END) * MAX_LEN;
+          else if (p >= SHRINK_START)
+            len = Math.max(
+              0,
+              (1 - (p - SHRINK_START) / (1 - SHRINK_START)) * MAX_LEN
+            );
+          else len = MAX_LEN;
+
+          const start = 1 - p;
+          const end = Math.min(1, start + len);
+          arc.arcDashInitialGap = start;
+          arc.arcDashLength = end - start;
+
           return true;
-        });
+        })
+        .slice(-MAX_ARCS);
 
-        // update arcs
-        arcsBuffer.current = arcsBuffer.current
-          .filter((arc) => {
-            const age = now - arc.startTime;
-            const t = age / arc.dashAnimateTime;
-            const p = Math.max(0, Math.min(1, t));
+      // update pulses
+      pointsBuffer.current = pointsBuffer.current
+        .filter((pt) => {
+          const age = now - pt.timestamp;
+          if (age > PULSE_DURATION) return false;
+          const progress = age / PULSE_DURATION;
+          pt.currentRadius = pt.maxRadius * progress;
+          pt.opacity = 1 - progress;
+          return true;
+        })
+        .slice(-MAX_POINTS);
 
-            if (p >= 1 && !arc.pulseTriggered) {
-              arc.pulseTriggered = true;
-              pointsBuffer.current.push({
-                id: now + "-" + Math.random().toString(36).slice(2, 6),
-                lat: arc.endLat,
-                lng: arc.endLng,
-                color: getPulseColor(arc.value),
-                timestamp: now,
-                maxRadius: 20 + (arc.value ?? 0) * 6,
-                currentRadius: 1,
-                opacity: 1.0,
-              });
-            }
-
-            if (t > 1.15) return false;
-
-            const MAX_LEN = 0.28;
-            const GROW_END = 0.2;
-            const SHRINK_START = 0.8;
-            let len;
-            if (p <= GROW_END) len = (p / GROW_END) * MAX_LEN;
-            else if (p >= SHRINK_START)
-              len = Math.max(
-                0,
-                (1 - (p - SHRINK_START) / (1 - SHRINK_START)) * MAX_LEN
-              );
-            else len = MAX_LEN;
-
-            const start = 1 - p;
-            const end = Math.min(1, start + len);
-            arc.arcDashInitialGap = start;
-            arc.arcDashLength = end - start;
-
-            return true;
-          })
-          .slice(-MAX_ARCS);
-
-        // update pulses
-        pointsBuffer.current = pointsBuffer.current
-          .filter((pt) => {
-            const age = now - pt.timestamp;
-            if (age > PULSE_DURATION) return false;
-            const progress = age / PULSE_DURATION;
-            pt.currentRadius = pt.maxRadius * progress;
-            pt.opacity = 1 - progress;
-            return true;
-          })
-          .slice(-MAX_POINTS);
-
-        globeInstance.current?.arcsData(arcsBuffer.current);
-        globeInstance.current?.pointsData(pointsBuffer.current);
-      }
+      globeInstance.current?.arcsData(arcsBuffer.current);
+      globeInstance.current?.pointsData(pointsBuffer.current);
 
       animationRef.current = requestAnimationFrame(animate);
     };
 
     animationRef.current = requestAnimationFrame(animate);
+    initializeSocket();
 
-    // WebSocket
-    if (connectSocket) {
-      connectSocket((rawEvent) => {
-        if (!rawEvent.origin?.code || !rawEvent.target?.code) return;
-        const origin = countryCoords[rawEvent.origin.code.toUpperCase()];
-        const target = countryCoords[rawEvent.target.code.toUpperCase()];
-        if (!origin || !target) return;
-        attackQueue.current.push({
-          origin,
-          target,
-          event: rawEvent,
-          releaseTime: Date.now() + Math.random() * RELEASE_WINDOW,
-        });
-      });
-    }
-
-    // resize handler
     const handleResize = () => {
       globeInstance.current
         .width(containerRef.current.clientWidth)
@@ -302,7 +300,7 @@ export default function useGlobe({ containerRef, connectSocket }) {
       cancelAnimationFrame(animationRef.current);
       window.removeEventListener("resize", handleResize);
     };
-  }, [containerRef, connectSocket]);
+  }, [containerRef, initializeSocket]);
 
   return {
     initialize,

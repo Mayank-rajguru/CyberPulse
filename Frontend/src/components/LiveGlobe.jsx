@@ -56,18 +56,14 @@ function AttackGlobe() {
   };
 
   useEffect(() => {
-    const wsHandler = (raw) => {
-      let event;
-      try {
-        event = typeof raw === "string" ? JSON.parse(raw) : raw;
-      } catch {
-        return;
-      }
-      if (!event?.origin?.code || !event?.target?.code) return;
-      addAttack(event);
+    const handlers = {
+      attack: addAttack, // function to render arcs
+      top_targets: setTopTargets, // useState setter
+      layer7_summary: setLayer7Summary,
     };
 
-    connectWebSocket(wsHandler);
+    connectWebSocket(handlers);
+
     return () => disconnectWebSocket();
   }, []);
 

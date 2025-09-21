@@ -32,7 +32,7 @@ const RadarSummaryCharts = () => {
   useEffect(() => {
     const fetchSummary = async () => {
       try {
-        const res = await axios.get("/api/radar/layer7-summary?limit=5");
+        const res = await axios.get("/api/radar/layer7-summary");
         setData(res.data.data);
       } catch (err) {
         console.error("Error fetching radar summary:", err);
