@@ -1,12 +1,14 @@
-let socket;
+let socket = null;
+const listeners = new Set()
 let shouldReconnect = true; // Add this flag
 let reconnectAttempts = 0;   // Add this counter
 
 const handlers = {
-  attack: (data) => {
-    console.log("Attack event:", data);
-    // Add actual handling here - update UI, trigger alerts, etc.
-  },
+ attack: (data) => {
+  console.log("Attack event:", data);
+
+  listeners.forEach((cb) => cb(data));
+},
   top_targets: (data) => {
     console.log("Top targets:", data);
     // Add actual handling here
@@ -19,6 +21,14 @@ const handlers = {
     console.log("💓 Heartbeat:", data.time);
     reconnectAttempts = 0; // Reset on successful heartbeat
   },
+};
+
+export const subscribeToAttacks = (callback) => {
+  listeners.add(callback);
+
+  return () => {
+    listeners.delete(callback);
+  };
 };
 
 export const connectWebSocket = () => {

@@ -43,12 +43,18 @@ async def websocket_endpoint(websocket: WebSocket):
         redis = Redis.from_url(
             REDIS_URL,
             decode_responses=True,
-            ssl=False
         )
         
         # Test Redis connection
         print("🔍 Testing Redis connection...")
-        await redis.ping()
+        try:
+            result = await redis.ping()
+            print("✅ REDIS PING SUCCESS:", result)
+        except Exception as e:
+            print("❌ REDIS PING FAILED")
+            print(repr(e))
+            traceback.print_exc()
+            raise
         print("✅ Redis connection successful")
         
         # Create pubsub
@@ -140,7 +146,7 @@ async def websocket_endpoint(websocket: WebSocket):
         try:
             if redis:
                 print("🔍 Closing Redis connection...")
-                await redis.close()
+                await redis.aclose()
                 print("✅ Redis connection closed")
         except Exception as cleanup_err:
             print(f"❌ Error during Redis cleanup: {cleanup_err}")

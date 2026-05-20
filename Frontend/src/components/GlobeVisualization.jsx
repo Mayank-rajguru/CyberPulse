@@ -46,7 +46,7 @@ export default function GlobeVisualization() {
         .filter(
           (c) =>
             c.city.toLowerCase().includes(term) ||
-            c.country.toLowerCase().includes(term)
+            c.country.toLowerCase().includes(term),
         )
         .sort((a, b) => {
           const aExact = a.city.toLowerCase().startsWith(term);
@@ -55,7 +55,7 @@ export default function GlobeVisualization() {
           if (!aExact && bExact) return 1;
           return a.city.localeCompare(b.city);
         })
-        .slice(0, 8)
+        .slice(0, 8),
     );
   }, [search]);
 
@@ -99,19 +99,19 @@ export default function GlobeVisualization() {
     value > 0.8
       ? "text-red-400 bg-red-900/30"
       : value > 0.6
-      ? "text-orange-400 bg-orange-900/30"
-      : value > 0.4
-      ? "text-yellow-400 bg-yellow-900/30"
-      : "text-green-400 bg-green-900/30";
+        ? "text-orange-400 bg-orange-900/30"
+        : value > 0.4
+          ? "text-yellow-400 bg-yellow-900/30"
+          : "text-green-400 bg-green-900/30";
 
   const getSeverityLabel = (value) =>
     value > 0.8
       ? "CRITICAL"
       : value > 0.6
-      ? "HIGH"
-      : value > 0.4
-      ? "MEDIUM"
-      : "LOW";
+        ? "HIGH"
+        : value > 0.4
+          ? "MEDIUM"
+          : "LOW";
 
   return (
     <div className="relative min-h-screen bg-black overflow-hidden flex flex-col">
@@ -272,14 +272,14 @@ export default function GlobeVisualization() {
                         {attack.origin} → {attack.target}
                         <span
                           className={`px-2 py-0.5 text-xs rounded ${getSeverityColor(
-                            attack.value
+                            attack.value,
                           )}`}
                         >
                           {getSeverityLabel(attack.value)}
                         </span>
                       </div>
                       <div className="text-gray-400 text-xs mt-1">
-                        Value: {attack.value.toFixed(3)}
+                        Value: {(attack.value ?? 0).toFixed(3)}
                       </div>
                       <div className="w-full h-1 bg-gray-700 rounded mt-1">
                         <div
@@ -287,12 +287,14 @@ export default function GlobeVisualization() {
                             attack.value > 0.8
                               ? "bg-red-500"
                               : attack.value > 0.6
-                              ? "bg-orange-500"
-                              : attack.value > 0.4
-                              ? "bg-yellow-500"
-                              : "bg-green-500"
+                                ? "bg-orange-500"
+                                : attack.value > 0.4
+                                  ? "bg-yellow-500"
+                                  : "bg-green-500"
                           }`}
-                          style={{ width: `${attack.value * 100}%` }}
+                          style={{
+                            width: `${Math.min(attack.value * 100, 100)}%`,
+                          }}
                         />
                       </div>
                     </div>
