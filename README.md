@@ -299,11 +299,10 @@ Frontend Renderer
 
 # Screenshots
 
-```markdown
 ![CyberPulse Homepage Screenshot](./Dump/Dashboard.png)
 ![CyberPulse Analytics Screenshot](./Dump/Analytics.png)
 ![CyberPulse SearchBar Screenshot](./Dump/Search.png)
-```
+
 
 ---
 
